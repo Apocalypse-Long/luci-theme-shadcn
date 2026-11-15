@@ -10,6 +10,9 @@
  */
 html {
 	font-size: 16px;              /* 基准 16px：后代 --text-sm = 14px（与 argon 一致） */
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
 }
 
 body {
@@ -22,4 +25,51 @@ body {
 .table th,
 .table .th {
 	padding-block: calc(var(--spacing) * 3);
+}
+
+/* ── 高分屏 / 大屏显示优化 (2K / 4K / 超宽屏) ─────────────────────── */
+
+/* 高分屏 (1440px+): 适度放宽侧边栏与表单标签列，避免长菜单和标签折行 */
+@media (min-width: 1600px) {
+	html:not([data-sidebar-collapsed="true"]):not([data-shadcn-nav="topbar"]) #sidebar {
+		width: 248px;
+	}
+
+	#maincontent {
+		padding: 1.75rem 2.25rem;
+	}
+
+	/* 限制内容区最大宽度并居中，防止超宽屏下表单和卡片无限拉伸 */
+	#maincontent > * {
+		max-width: 1440px;
+		margin-inline: auto;
+	}
+
+	.cbi-value > .cbi-value-title {
+		flex: 0 0 12.5rem;
+	}
+}
+
+/* 2K / 4K 超大屏 (2200px+): 微调根字号与最大内容宽度，提升高分辨率观感 */
+@media (min-width: 2200px) {
+	html {
+		font-size: 17px;
+	}
+
+	#maincontent {
+		padding: 2rem 3rem;
+	}
+
+	#maincontent > * {
+		max-width: 1600px;
+	}
+}
+
+/* HiDPI / Retina 屏幕字体与图标锐利度优化 */
+@media (min-resolution: 1.5dppx), (-webkit-min-device-pixel-ratio: 1.5) {
+	.sidebar-logo,
+	.shadcn-icon,
+	.topbar-icon-btn img {
+		image-rendering: -webkit-optimize-contrast;
+	}
 }
