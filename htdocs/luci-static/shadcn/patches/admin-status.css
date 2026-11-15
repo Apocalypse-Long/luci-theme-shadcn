@@ -1,0 +1,112 @@
+/*
+ * Port status cards on narrow screens.
+ *
+ * luci-mod-status (view/status/include/29_ports.js) renders the grid inline:
+ *
+ *   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(70px, 1fr))">
+ *     <div class="ifacebox" style="margin:.25em;min-width:70px;max-width:100px">
+ *
+ * while the theme raises the card minimum to 32 * --spacing (112px) and centres
+ * each card inside its track. A phone leaves roughly 100px per column, so the
+ * 112px wide boxes overflow their tracks by a few pixels on both sides and end
+ * up visually glued to their neighbours.
+ *
+ * Give the cards a comfortable minimum width instead -- auto-fit then lands on
+ * two columns on a phone (304px of content on a 360pt screen leaves room for
+ * 2 x 140px plus the gap, but not for three) and four on a small tablet -- and
+ * use a grid gap so the spacing does not depend on the inline margins.
+ *
+ * Loaded as a per-page patch: the file name matches the "admin/status" path
+ * prefix, so it only ships with the status pages (see the patches handling in
+ * header.ut).
+ */
+@media (max-width: 900px) {
+	.cbi-section div[style*="display:grid"]:has(> .ifacebox) {
+		/* inline style, hence !important */
+		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+		gap: calc(var(--spacing) * 3);
+		place-items: stretch;
+	}
+
+	/* Let the cards fill the whole track -- the inline max-width would keep
+	   them at 100px and centre them again. */
+	.cbi-section div[style*="display:grid"]:has(> .ifacebox) > .ifacebox {
+		max-width: none !important;
+		margin: 0 !important;
+	}
+
+	/* With the card stretched, the traffic figures and the port name stay on
+	   one line more often; keep them from wrapping awkwardly. */
+	.cbi-section div[style*="display:grid"]:has(> .ifacebox) > .ifacebox .ifacebox-body {
+		min-width: 0;
+	}
+}
+/* ────────────────────────────────────────────────────────────────────────
+ * ifacebox 比例调整：图标放大、留白收紧（第二版：进一步压矮）
+ *
+ * 背景：主题把 ifacebox 里的图标宽度定在 --spacing × 5（约 17.5px）、
+ * body 内边距 3 × --spacing（约 10.5px），卡片显得"框大、图标小"。
+ * 第一版放大图标并收紧留白；本版继续压缩纵向高度：
+ *   - body 上下内边距 7px -> 3.5px（左右保持 7px），行距归零
+ *   - head 上下 5.25px -> 3.5px
+ *   - 隐藏 body 直接子级的 <br>（纵向 flex layout 下它是多余的一行）
+ * ──────────────────────────────────────────────────────────────────────── */
+
+.ifacebox .ifacebox-body { padding: 3.5px 7px; gap: 0; }
+.ifacebox .ifacebox-head { padding-block: 3.5px; }
+
+/* 纵向 flex 布局下 <br> 只是多占一行高度（正文换行由 flex 自身完成） */
+.ifacebox .ifacebox-body > br { display: none; }
+
+/* 图标：主图标 17.5px -> 26.25px；行内小图标 17.5px -> 21px（保持单行排布） */
+.ifacebox .ifacebox-body > img { width: 26.25px; }
+.ifacebox .ifacebox-body > span img { width: 21px; }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * 无线区块的强调色（与「网络」区块的 ifacebox-head.active 保持一致）
+ *
+ * 状态页里「网络」区块的卡片头在接口可用时带 .active（主题据此上主色），
+ * 而「无线」区块（60_wifi.js）的 ifacebox-head 只在 radio.isUp() 为真时
+ * 才带 .active —— 部分固件上该判定不返回真，卡片头就一直是灰白；
+ * 「已连接站点」的网络徽标也没有任何强调色。
+ *
+ * 这里按区块兜底：无线卡片头统一用主色（与网络卡片视觉一致）。
+ * 依赖 #wifi_assoclist_table（60_wifi.js 的固定 id）定位无线区块。
+ * ──────────────────────────────────────────────────────────────────────── */
+
+.cbi-section:has(#wifi_assoclist_table) .network-status-table .ifacebox-head {
+	background-color: var(--primary);
+	border-color: var(--primary);
+	color: var(--primary-foreground);
+}
+
+/* 端口状态卡片：端口名标题条也用主色（与网络 / 无线卡片统一）。
+   端口卡片里有两个 .ifacebox-head：第一个是端口名，第二个是 zone 色条
+   （cbi-tooltip-container），所以用 :first-child 只命中端口名那条。 */
+.cbi-section div[style*="display:grid"]:has(> .ifacebox) > .ifacebox > .ifacebox-head:first-child {
+	background-color: var(--primary);
+	border-color: var(--primary);
+	color: var(--primary-foreground);
+}
+
+
+/* ────────────────────────────────────────────────────────────────────────
+ * 已连接站点：网络徽标（ifacebadge）的长文本在框内换行
+ *
+ * 主题的 .ifacebadge 是 inline-flex + nowrap，内容按需撑宽；长 SSID
+ * （如「接入点 AP "肥猫快餐" (wifi0.network1)」）会把徽标顶出所在格子，
+ * 压到右侧「MAC 地址」列上。这里让徽标不超过格子宽度，并允许文字换行。
+ * ──────────────────────────────────────────────────────────────────────── */
+#wifi_assoclist_table .td { min-width: 0; }
+
+#wifi_assoclist_table .ifacebadge {
+	max-width: 100%;
+	min-width: 0;
+}
+
+#wifi_assoclist_table .ifacebadge > span {
+	min-width: 0;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	line-height: 1.4;
+}

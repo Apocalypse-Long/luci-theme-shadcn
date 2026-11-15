@@ -5,8 +5,26 @@
 -#}
 
 {% const boardinfo = ubus.call('system', 'board') ?? {}; -%}
+{%
+	/* luci-app-shadcn-config: wallpaper selection (default / none / random / <file>). */
+	let login_bg = `${media}/images/login-bg.jpeg`;
+	let login_logo = null;
+
+	try {
+		const shadcn = require('luci.shadcn_config');
+		const cfg = shadcn.load();
+
+		login_bg = shadcn.login_background(cfg, media);
+		login_logo = shadcn.brand_asset(cfg, media, 'logo');
+	}
+	catch (e) {
+		warn(`luci-app-shadcn-config: ${e}\n`);
+	}
+-%}
 {% include('header', { blank_page: true, prefetched_boardinfo: boardinfo }) %}
-<style>:root{--login-bg-image:url('{{ media }}/images/login-bg.jpeg')}</style>
+{% if (login_bg != false): %}
+<style data-luci-shell>:root{--login-bg-image:url('{{ login_bg }}')}</style>
+{% endif %}
 
 <main class="login-layout">
 
@@ -14,7 +32,7 @@
 	<section class="login-form-panel">
 
 		<span class="login-logo login-logo--topleft animate-element animate-delay-100">
-			<img src="{{ media }}/images/logo.svg" alt="" width="36" height="36">
+			<img src="{{ login_logo ? login_logo.url : `${media}/images/logo.svg` }}" alt="" width="36" height="36">
 		</span>
 
 		<div class="login-form-wrap">

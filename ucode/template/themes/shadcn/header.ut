@@ -37,22 +37,75 @@
 		sort(patch_all);
 	}
 
+	// ── luci-app-shadcn-config integration ────────────────────────────
+	// Brand colour overrides, day/night mode policy and login wallpaper are
+	// read from /etc/config/shadcn. Without the configuration app installed
+	// all values fall back to the built-in theme defaults.
+	let shadcn_cfg = {
+		configured: false,
+		mode: 'auto',
+		lock: false,
+		brand: null,
+		brand_dark: null,
+		brand_fg: 'auto',
+		brand_fg_dark: 'auto',
+		login_bg: 'default',
+		nav: 'sidebar',
+		logo: null,
+		favicon: null
+	};
+	let shadcn_style = null;
+	let shadcn_colors = null;
+	let shadcn_logo = null;
+	let shadcn_favicon = null;
+
+	try {
+		const shadcn = require('luci.shadcn_config');
+
+		shadcn_cfg = shadcn.load();
+		shadcn_style = shadcn.brand_style(shadcn_cfg);
+		shadcn_colors = shadcn.theme_colors(shadcn_cfg);
+		shadcn_logo = shadcn.brand_asset(shadcn_cfg, media, 'logo');
+		shadcn_favicon = shadcn.brand_asset(shadcn_cfg, media, 'favicon');
+	}
+	catch (e) {
+		warn(`luci-app-shadcn-config: ${e}\n`);
+	}
+
+	const theme_color_light = shadcn_colors ? shadcn_colors.light : '#f9fafd';
+	const theme_color_dark = shadcn_colors ? shadcn_colors.dark : '#0c0d0f';
+
 	http.prepare_content('text/html; charset=UTF-8');
 -%}
 
 <!DOCTYPE html>
-<html lang="{{ dispatcher.lang }}" data-shadcn-media="{{ media }}">
+<html lang="{{ dispatcher.lang }}" data-shadcn-media="{{ media }}" data-shadcn-nav="{{ shadcn_cfg.nav }}">
 	<head>
 		<meta charset="utf-8">
-		<meta name="theme-color" content="#f9fafd" media="(prefers-color-scheme: light)">
-		<meta name="theme-color" content="#0c0d0f" media="(prefers-color-scheme: dark)">
+		<meta name="theme-color" content="{{ theme_color_light }}" media="(prefers-color-scheme: light)">
+		<meta name="theme-color" content="{{ theme_color_dark }}" media="(prefers-color-scheme: dark)">
 		<title>{{ striptags(((boardinfo && boardinfo.hostname) ? boardinfo.hostname : '?') + ((dispatched && dispatched.title) ? (' | ' + _(dispatched.title)) : '')) }}</title>
 		<script>
+			/* Day/night policy -- see luci-app-shadcn-config. mode: auto|light|dark,
+			   lock: true disables the per-browser preference entirely. */
+			window.SHADCN_THEME_CONFIG = { mode: '{{ shadcn_cfg.mode }}', lock: {{ shadcn_cfg.lock ? 'true' : 'false' }} };
 			(function () {
 				{% if (blank_page): %}
 				try { sessionStorage.removeItem('shadcn.sidebar.cache'); } catch (e) {}
 				{% endif %}
-				var theme = localStorage.getItem('shadcn.theme') || 'device';
+				var cfg = window.SHADCN_THEME_CONFIG;
+				var stored = null;
+				try { stored = localStorage.getItem('shadcn.theme'); } catch (e) {}
+				var theme = stored || 'device';
+				if (cfg.lock) {
+					theme = (cfg.mode === 'auto') ? 'device' : cfg.mode;
+					try { localStorage.setItem('shadcn.theme', theme); } catch (e) {}
+					document.documentElement.setAttribute('data-shadcn-mode-lock', 'true');
+				}
+				else if (!stored && cfg.mode !== 'auto') {
+					theme = cfg.mode;
+					try { localStorage.setItem('shadcn.theme', theme); } catch (e) {}
+				}
 				var dark = theme === 'dark' || (theme === 'device' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 				document.documentElement.setAttribute('data-darkmode', dark ? 'true' : 'false');
 				var collapsed = localStorage.getItem('shadcn.sidebar') === 'true';
@@ -65,6 +118,10 @@
 		<link rel="stylesheet" href="{{ media }}/login.css">
 		{% else %}
 		<link rel="stylesheet" href="{{ media }}/main.css" data-luci-shell>
+		{% if (shadcn_cfg.nav == 'topbar'): %}
+		{# luci-app-shadcn-config: sidebar -> horizontal top bar (desktop only) -#}
+		<link rel="stylesheet" href="{{ media }}/nav-topbar.css" data-luci-shell>
+		{% endif %}
 		{% for (let patch in patch_files): %}
 		<link rel="stylesheet" href="{{ media }}/patches/{{ patch }}.css" data-luci-patch="{{ patch }}">
 		{% endfor %}
@@ -72,15 +129,28 @@
 		<script defer src="{{ media }}/patches/{{ patch }}.js" data-luci-patch="{{ patch }}"></script>
 		{% endfor %}
 		{% endif %}
+		{% if (shadcn_favicon): %}
+		<link rel="icon" href="{{ shadcn_favicon.url }}" type="{{ shadcn_favicon.mime }}">
+		<link rel="apple-touch-icon" href="{{ shadcn_favicon.url }}">
+		{% else %}
 		<link rel="icon" href="{{ media }}/images/favicon.svg" type="image/svg+xml">
 		<link rel="icon" href="{{ media }}/images/favicon.ico" sizes="any">
 		<link rel="apple-touch-icon" href="{{ media }}/images/apple-touch-icon.png">
+		{% endif %}
 		<link rel="manifest" href="{{ media }}/images/site.webmanifest">
 		{% if (dispatched && dispatched.css): %}
 		<link rel="stylesheet" href="{{ resource }}/{{ dispatched.css }}" data-luci-node-css="{{ entityencode(dispatched.css, true) }}">
 		{% endif %}
 		{% if (css): %}
 		<style data-luci-shell>{{ css }}</style>
+		{% endif %}
+		{% if (shadcn_style != null || shadcn_cfg.lock): %}
+		<style id="shadcn-config" data-luci-shell>
+		{% if (shadcn_style != null): %}{{ shadcn_style }}
+		{% endif %}
+		{% if (shadcn_cfg.lock): %}[data-shadcn-mode-lock="true"] #theme-toggle-btn { display: none !important; }
+		{% endif %}
+		</style>
 		{% endif %}
 		{% if (!blank_page): %}
 		<script src="{{ dispatcher.build_url('admin/translations', dispatcher.lang) }}"></script>
@@ -96,6 +166,9 @@
 			data-media="{{ media }}"
 			data-hostname="{{ entityencode(striptags((boardinfo && boardinfo.hostname) ? boardinfo.hostname : 'Shadcn'), true) }}"
 		></div>
+		<script>
+			{% if (shadcn_logo): %}window.SHADCN_LOGO_URL = '{{ shadcn_logo.url }}';{% else %}window.SHADCN_LOGO_URL = null;{% endif %}
+		</script>
 		<script>
 			/* Pre-paint sidebar restore: menu-shadcn.js caches the rendered sidebar
 			   in sessionStorage; replay it synchronously here so the sidebar is in
@@ -167,6 +240,20 @@
 				} catch (e) {
 					try { sessionStorage.removeItem('shadcn.sidebar.cache'); } catch (e2) {}
 				}
+			})();
+
+			/* Custom brand logo: patch cached sidebar & freshly built sidebar. */
+			(function () {
+				var url = window.SHADCN_LOGO_URL;
+				if (!url) return;
+
+				function apply() {
+					var img = document.querySelector('#sidebar .sidebar-logo');
+					if (img && img.getAttribute('src') !== url) img.setAttribute('src', url);
+				}
+
+				document.addEventListener('shadcn-sidebar-ready', apply);
+				apply();
 			})();
 		</script>
 
